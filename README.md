@@ -1,107 +1,114 @@
 # gosecure
 
-`gosecure` is an experimental security analysis tool for explaining security-sensitive behavior changes between Go package releases.
+`gosecure` is an experimental, Go-specific dependency upgrade reviewer. It aims
+to explain security-relevant behavior introduced by a new module release before
+that behavior is associated with a published vulnerability or malware advisory.
 
-Instead of building another general-purpose dependency vulnerability scanner, gosecure focuses on a different question:
+The project focuses on one question:
 
-> What new security-relevant behavior does this package version introduce?
-
-The goal is to help maintainers review dependency upgrades and detect suspicious changes before they are classified as a known vulnerability or malicious package.
+> What security-sensitive behavior did this Go module upgrade introduce, and
+> can the consuming application reach it?
 
 ## Project status
 
-gosecure is in an early design and development stage. The repository currently contains foundations for Go module discovery, vulnerability lookup, dependency graphs, version diffs, and risk signals. The behavior-analysis workflow described below is the intended direction and is not yet fully implemented.
+The repository is being rebuilt around this narrower direction. It currently
+contains the intended package structure and a placeholder CLI, but no working
+analysis pipeline. The examples below describe the target behavior, not a
+released feature set.
 
-## Expected features
+## Intended workflow
 
-### Release behavior diff
+Given two versions of a Go module and, optionally, a consuming project,
+`gosecure` should:
 
-Compare two versions of a Go module and report newly introduced security-sensitive behavior, including:
+1. acquire and normalize both module releases;
+2. identify security-sensitive behavior in each release;
+3. report only behavior introduced by the newer release;
+4. determine whether the consumer can reach that behavior;
+5. verify that published module artifacts match the expected source revision;
+6. render evidence in terminal, JSON, or SARIF form.
+
+An intended command could look like:
+
+```bash
+gosecure review example.com/module v1.4.2 v1.4.3 --consumer ./my-project
+```
+
+## Initial behavior coverage
+
+The first implementation should remain deliberately small and concentrate on:
 
 - process and shell execution;
 - outbound network access and newly referenced domains;
-- reads of credentials, environment variables, home directories, or other sensitive files;
+- reads of credentials, sensitive environment variables, and sensitive files;
 - use of CGO, `unsafe`, reflection, or embedded executables;
-- changes to `go:generate`, build scripts, and platform-specific files;
-- added binary assets, generated code, or heavily obfuscated source.
+- changes to `go:generate`, build scripts, build tags, and platform-specific files.
 
-### Reachability and evidence
-
-- Build call graphs to distinguish reachable behavior from unused code.
-- Show the source location and call path for each finding.
-- Explain what changed between releases instead of returning only an opaque risk score.
-- Account for build tags, target operating systems, and architectures where possible.
-
-### Source and release provenance
-
-- Compare Git tags, module proxy source archives, and repository contents.
-- Highlight source files or artifacts that exist in a release but not in the expected revision.
-- Detect repository, module path, or maintainer ownership changes.
-- Surface unusual release timing or version-history anomalies as supporting evidence.
-
-### Policy and automation
-
-- Produce `allow`, `warn`, or `block` decisions from configurable policies.
-- Support human-readable, JSON, and SARIF reports.
-- Run locally or in CI without requiring a specific source-hosting platform.
-- Allow known or reviewed behavior to be suppressed with an auditable justification.
+Findings should include source locations, changed code, applicable build
+constraints, and call paths where those paths can be established. A single
+unexplained risk score is not considered sufficient evidence.
 
 ## Example report
 
-The intended output will look similar to:
+The intended output is evidence-oriented:
 
 ```text
 example.com/module v1.4.2 -> v1.4.3
 
 HIGH    introduced process execution via os/exec.Command
         internal/update/install.go:48
-        reachable from update.Apply
+        reachable from consumer command/update.Apply
 
 MEDIUM  introduced outbound connection to telemetry.example.com
         internal/client/report.go:27
+        linux/amd64 only
 
-INFO    repository ownership changed before this release
+WARN    module proxy archive contains a file absent from the expected Git tag
 
 Decision: manual review required
 ```
 
-## Scope
+## Positioning
 
-The initial scope is deliberately Go-specific. Multi-ecosystem dependency discovery and known-CVE matching are not primary product goals: GitHub Dependency Review, Dependabot, OSV-Scanner, Trivy, Grype, and other mature tools already cover those use cases well.
+`gosecure` is not another general-purpose software composition analysis tool.
+Dependency Review, Dependabot, OSV-Scanner, Trivy, Grype, and similar projects
+already cover dependency inventory and known vulnerabilities well.
 
-Known vulnerability data may still be included as supporting context, but gosecure's main value should come from behavioral and provenance evidence that is not dependent on an existing advisory.
+Known-vulnerability data may be included later as supporting context. The core
+value must come from reproducible behavior differences, Go-aware reachability,
+and source/release provenance evidence.
 
-## Current repository structure
+## Repository structure
 
-- `cmd/gosecure/`: CLI entrypoint and future command wiring.
-- `internal/config/`: shared runtime configuration.
-- `pkg/scanner/`: current Go module dependency discovery.
-- `pkg/vuln/`: current vulnerability backends and caching.
-- `pkg/graph/`: dependency graph representation and algorithms.
-- `pkg/diff/`: dependency snapshot and version comparison foundations.
-- `pkg/risk/`: current risk signals and policy foundations.
+- `cmd/gosecure/`: CLI entry point.
+- `internal/source/`: acquire and normalize module releases.
+- `internal/behavior/`: identify security-sensitive Go behavior.
+- `internal/compare/`: compare behavior, source, and artifacts between releases.
+- `internal/reachability/`: calculate consumer-to-dependency call paths.
+- `internal/provenance/`: verify module artifacts against source revisions.
+- `internal/consumer/`: discover the consumer's resolved dependency graph and
+  build context.
+- `internal/advisory/`: optional known-vulnerability context.
+- `internal/report/`: terminal, JSON, and SARIF output.
 
-As the new direction is implemented, the planned core components are:
+These are intentionally empty package boundaries. Public APIs should be added
+only after an end-to-end review workflow establishes the required data model.
 
-- `pkg/source/`: acquire and normalize two package releases.
-- `pkg/behavior/`: identify security-sensitive capabilities and API usage.
-- `pkg/callgraph/`: calculate reachability and evidence paths.
-- `pkg/diff/`: compare behavior, source, and artifacts between releases.
-- `pkg/provenance/`: verify source and release consistency.
-- `pkg/policy/`: turn findings into configurable decisions.
-- `pkg/report/`: render terminal, JSON, and SARIF output.
+## MVP order
 
-## Non-goals
+1. Compare the source of two versions of one Go module.
+2. Detect a small set of newly introduced sensitive API uses.
+3. Report exact source evidence without a numeric risk score.
+4. Add build-tag and platform awareness.
+5. Add consumer reachability.
+6. Add release provenance checks and SARIF output.
 
-- Replacing Dependabot or GitHub Dependency Review.
-- Becoming a universal lockfile or container vulnerability scanner.
-- Competing on the number of supported package ecosystems.
-- Treating a single unexplained numeric risk score as a security verdict.
+Multi-ecosystem support, generic lockfile scanning, policy engines, dashboards,
+and vulnerability-database breadth are outside the initial MVP.
 
 ## Development
 
 ```bash
-go mod download
 go test ./...
 ```
 
