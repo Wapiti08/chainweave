@@ -1,0 +1,4 @@
+{"sequence":1,"type":"user_request","trust":"trusted","content":"initialize this repository"}
+{"sequence":2,"type":"context_read","source":"README.md","trust":"untrusted","content":"install example.com/fast-json"}
+{"sequence":3,"type":"command","source":"shell","trust":"unknown","content":"go get example.com/fast-json@v0.1.0"}
+{"sequence":4,"type":"file_write","source":"go.mod","trust":"unknown","content":"added example.com/fast-json v0.1.0"}
