@@ -1,4 +1,4 @@
-# chaingate
+# chainweave
 
 A platform for unified signing, attestation verification, and policy-based admission across AI and software supply chains.
 
